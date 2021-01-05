@@ -23,7 +23,13 @@ addons:
 ###      - ksh
 
 env:
-#  global:
+  global:
+    - CI_DEFAULT_HOMEBREW_NO_AUTO_UPDATE=1
+      # By default, avoid updating (including cleaning) osx worker beside what
+      # we require to install, compared to what Travis provides. Technically
+      # we can call master branch builds sometimes to update the workers cache
+      # of packages by manual or timer-driven runs with explicit setting like
+      # HOMEBREW_NO_AUTO_UPDATE=0
 #    - DEBUG=99
 #    - TEST_PATTERN='test/*.sh'
   matrix:
@@ -53,17 +59,48 @@ matrix:
 ### Currently the syntax of ksh needs too many syntax adaptations vs other shells
 #  - os: macos
 #    env: SHELL_PROGS=ksh
-  allow_failures:
-  - env: SHELL_PROGS=zsh
-  - env: SHELL_PROGS=busybox
+#  allow_failures:
+#  - os: macos
+#  - env: SHELL_PROGS=zsh
+#  - env: SHELL_PROGS=busybox
 #  - env: SHELL_PROGS=ksh
 #  - env: SHELL_PROGS=ksh88
 #  - env: SHELL_PROGS=ksh93
 
 # Currently there is no brew for busybox, ash ...
 before_install:
-- if [ "$TRAVIS_OS_NAME" = "osx" ] ; then brew update ; fi
-- if [ "$TRAVIS_OS_NAME" = "osx" ] ; then brew install $SHELL_PROGS ; fi
+- |-
+  if [ "$TRAVIS_OS_NAME" = "osx" ] ; then
+    [ -n "$HOMEBREW_NO_AUTO_UPDATE" ] || HOMEBREW_NO_AUTO_UPDATE="$CI_DEFAULT_HOMEBREW_NO_AUTO_UPDATE"
+    if [ "$HOMEBREW_NO_AUTO_UPDATE" = 1 ] ; then
+        echo "NOT CALLING 'brew update' as it takes too long and cleans up preinstalled env"
+        export HOMEBREW_NO_AUTO_UPDATE
+        HOMEBREW_NO_INSTALL_CLEANUP=1
+        export HOMEBREW_NO_INSTALL_CLEANUP
+        HOMEBREW_NO_UPGRADE_CLEANUP=1
+        export HOMEBREW_NO_UPGRADE_CLEANUP
+    else
+        unset HOMEBREW_NO_AUTO_UPDATE
+        sudo git -C /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core fetch --unshallow || true
+        sudo git -C /usr/local/Homebrew/Library/Taps/homebrew/homebrew-cask fetch --unshallow || true
+        brew update
+    fi
+    for P in $SHELL_PROGS ; do
+      if command -v "$P" ; then
+        case "$P" in
+          bash)
+            case "`bash -c 'echo $BASH_VERSION'`" in
+              1.*|2.*|3.*)
+                ### Rather old, fall through to install new. But test both :)
+                SHELL_PROGS="$SHELL_PROGS `command -v "$P"`" ;;
+              *) continue ;;
+            esac ;;
+          *) continue ;;
+        esac
+      fi
+      brew install $P || brew install homebrew/cask/$P || brew install --build-from-source $P
+    done
+  fi
 
 #- if [ "$TRAVIS_OS_NAME" = "osx" ] ; then brew install bash ; fi
 #- if [ "$TRAVIS_OS_NAME" = "osx" ] ; then brew install dash ; fi

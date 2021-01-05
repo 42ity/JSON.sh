@@ -70,6 +70,7 @@ if [ "$is_wordsplit_disabled" != 0 ]; then setopt shwordsplit; fi
 
 for SHELL_PROG in $SHELL_PROGS ; do
     case "$SHELL_PROG" in
+        busybox_sh) SHELL_PROG="busybox sh" ;;
         busybox|*/busybox) SHELL_PROG="$SHELL_PROG sh" ;;
         ' '|'-') SHELL_PROG='' ;; # system default shell
     esac
